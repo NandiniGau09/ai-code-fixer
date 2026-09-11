@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>NeuroFix AI</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs/loader.min.js"></script>
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <!-- HEADER -->
+        <header>
+
+            <h1>NeuroFix AI</h1>
+
+            <p>
+                Intelligent AI Developer Assistant Platform
+            </p>
+
+        </header>
+
+
+        <!-- LANGUAGE -->
+        <div class="input-section">
+
+            <label>Select Language</label>
+
+            <select id="language-select">
+
+                <option value="python">
+                    Python
+                </option>
+
+                <option value="java">
+                    Java
+                </option>
+
+                <option value="cpp">
+                    C++
+                </option>
+
+                <option value="javascript">
+                    JavaScript
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <!-- MONACO EDITOR -->
+        <div class="editor-section">
+
+            <label>Your Code</label>
+
+            <div id="editor"></div>
+
+            <button id="analyze-btn">
+                Analyze & Fix
+            </button>
+
+        </div>
+
+
+        <!-- LOADING -->
+        <div
+            id="loading"
+            class="loading hidden"
+        >
+
+            <div class="spinner"></div>
+
+            AI analyzing your code...
+
+        </div>
+
+
+        <!-- RESULTS -->
+        <div
+            id="results"
+            class="results hidden"
+        >
+
+            <!-- SCORE -->
+            <div class="score-container">
+
+                <div class="score-header">
+
+                    <h3>
+                        Code Quality
+                    </h3>
+
+                    <span id="quality-score-text">
+                        0 / 10
+                    </span>
+
+                </div>
+
+                <div class="progress-bar">
+
+                    <div
+                        id="score-fill"
+                        class="progress-fill"
+                    ></div>
+
+                </div>
+
+            </div>
+
+
+            <!-- ISSUES -->
+            <div class="section">
+
+                <h3>
+                    Issues
+                </h3>
+
+                <pre id="issues"></pre>
+
+            </div>
+
+
+            <!-- FIXED CODE -->
+            <div class="section">
+
+                <h3>
+                    Fixed Code
+                </h3>
+
+                <pre id="fixed-code"></pre>
+
+                <button
+                    id="copy-fixed"
+                    class="copy-btn"
+                >
+                    Copy Fixed Code
+                </button>
+
+            </div>
+
+
+            <!-- IMPROVEMENTS -->
+            <div class="section">
+
+                <h3>
+                    Improvements
+                </h3>
+
+                <ul id="improvements"></ul>
+
+            </div>
+
+
+            <!-- EXPLANATION -->
+            <div class="section">
+
+                <h3>
+                    Explanation
+                </h3>
+
+                <p id="explanation"></p>
+
+            </div>
+
+        </div>
+
+
+        <!-- GITHUB ANALYZER -->
+        <div class="repo-section">
+
+            <h2>
+                GitHub Repository Analyzer
+            </h2>
+
+            <input
+                type="text"
+                id="repo_url"
+                placeholder="Paste GitHub repository URL"
+            >
+
+            <button onclick="analyzeRepo()">
+                Analyze Repository
+            </button>
+
+        </div>
+
+
+        <!-- AI CHAT -->
+        <div class="chat-section">
+
+            <h2>
+                AI Coding Assistant
+            </h2>
+
+            <div id="chat-box"></div>
+
+            <textarea
+                id="chat-input"
+                placeholder="Ask AI anything about coding..."
+            ></textarea>
+
+            <button onclick="sendMessage()">
+                Send
+            </button>
+
+        </div>
+
+
+        <!-- ERROR -->
+        <div
+            id="error"
+            class="error hidden"
+        ></div>
+
+    </div>
+
+
+    <script>
+
+        let monacoEditor;
+
+        let currentDecorations = [];
+
+
+        // ==========================================
+        // MONACO
+        // ==========================================
+
+        require.config({
+
+            paths: {
+
+                vs:
+                'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min/vs'
+            }
+        });
+
+        require(
+            ['vs/editor/editor.main'],
+            function () {
+
+                monacoEditor =
+                    monaco.editor.create(
+
+                    document.getElementById(
+                        'editor'
+                    ),
+
+                    {
+
+                        value:
+`# Paste your code here
+
+x=10
+
+if x=5:
+    print("hello")
+`,
+
+                        language: 'python',
+
+                        theme: 'vs-dark',
+
+                        automaticLayout: true,
+
+                        fontSize: 15,
+
+                        minimap: {
+                            enabled: false
+                        }
+                    }
+                );
+            }
+        );
+
+
+        const analyzeBtn =
+            document.getElementById(
+                'analyze-btn'
+            );
+
+        const loading =
+            document.getElementById(
+                'loading'
+            );
+
+        const results =
+            document.getElementById(
+                'results'
+            );
+
+        const errorDiv =
+            document.getElementById(
+                'error'
+            );
+
+
+        // ==========================================
+        // ANALYZE BUTTON
+        // ==========================================
+
+        analyzeBtn.addEventListener(
+            'click',
+            async () => {
+
+                const code =
+                    monacoEditor
+                    .getValue()
+                    .trim();
+
+                const language =
+                    document.getElementById(
+                        'language-select'
+                    ).value;
+
+                if (!code) {
+
+                    return showError(
+                        'Please enter code'
+                    );
+                }
+
+                showLoading(true);
+
+                hideError();
+
+                try {
+
+                    const response =
+                        await fetch(
+                            '/analyze',
+                            {
+
+                                method: 'POST',
+
+                                headers: {
+                                    'Content-Type':
+                                    'application/json'
+                                },
+
+                                body:
+                                JSON.stringify({
+                                    code,
+                                    language
+                                })
+                            }
+                        );
+
+                    const data =
+                        await response.json();
+
+                    if (response.ok) {
+
+                        displayResults(data);
+
+                    } else {
+
+                        showError(
+                            data.error
+                        );
+                    }
+
+                } catch (err) {
+
+                    showError(
+                        err.message
+                    );
+
+                } finally {
+
+                    showLoading(false);
+                }
+            }
+        );
+
+
+        // ==========================================
+        // DISPLAY RESULTS
+        // ==========================================
+
+        function displayResults(data) {
+
+            document.getElementById(
+                'issues'
+            ).textContent =
+
+                Array.isArray(data.issues)
+                ? data.issues.join('\n')
+                : 'No issues found';
+
+
+            document.getElementById(
+                'fixed-code'
+            ).textContent =
+
+                data.fixed_code ||
+                'No fixed code generated';
+
+
+            document.getElementById(
+                'explanation'
+            ).textContent =
+
+                data.explanation ||
+                'No explanation available';
+
+
+            // improvements
+            const improvementsList =
+                document.getElementById(
+                    'improvements'
+                );
+
+            improvementsList.innerHTML = '';
+
+            if (
+                Array.isArray(
+                    data.improvements
+                )
+            ) {
+
+                data.improvements.forEach(imp => {
+
+                    const li =
+                        document.createElement(
+                            'li'
+                        );
+
+                    li.textContent = imp;
+
+                    improvementsList.appendChild(li);
+                });
+
+            } else {
+
+                improvementsList.innerHTML =
+                    '<li>No improvements available</li>';
+            }
+
+
+            // score
+            const score =
+                data.quality_score || 0;
+
+            document.getElementById(
+                'quality-score-text'
+            ).textContent =
+                `${score} / 10`;
+
+            document.getElementById(
+                'score-fill'
+            ).style.width =
+                `${score * 10}%`;
+
+
+            // highlights
+            highlightErrors(
+                data.error_lines || []
+            );
+
+            results.classList.remove(
+                'hidden'
+            );
+        }
+
+
+        // ==========================================
+        // HIGHLIGHT ERRORS
+        // ==========================================
+
+        function highlightErrors(
+            errorLines
+        ) {
+
+            monacoEditor.deltaDecorations(
+                currentDecorations,
+                []
+            );
+
+            currentDecorations = [];
+
+            const decorations =
+                errorLines.map(
+                    lineNumber => ({
+
+                        range:
+                        new monaco.Range(
+                            lineNumber,
+                            1,
+                            lineNumber,
+                            1
+                        ),
+
+                        options: {
+
+                            isWholeLine: true,
+
+                            className:
+                            'error-highlight'
+                        }
+                    })
+                );
+
+            currentDecorations =
+                monacoEditor.deltaDecorations(
+                    [],
+                    decorations
+                );
+        }
+
+
+        // ==========================================
+        // GITHUB ANALYZER
+        // ==========================================
+
+        async function analyzeRepo() {
+
+            const repo_url =
+                document.getElementById(
+                    'repo_url'
+                ).value;
+
+            if (!repo_url) {
+
+                return showError(
+                    'Please enter GitHub URL'
+                );
+            }
+
+            try {
+
+                showLoading(true);
+
+                const response =
+                    await fetch(
+                        '/analyze-repo',
+                        {
+
+                            method: 'POST',
+
+                            headers: {
+                                'Content-Type':
+                                'application/json'
+                            },
+
+                            body:
+                            JSON.stringify({
+                                repo_url
+                            })
+                        }
+                    );
+
+                const data =
+                    await response.json();
+
+                let repoOutput = '';
+
+                data.forEach(file => {
+
+                    repoOutput +=
+`
+FILE:
+${file.file}
+
+ISSUES:
+${file.issues.join('\n')}
+
+=========================
+
+`;
+                });
+
+                document.getElementById(
+                    'issues'
+                ).textContent =
+                    repoOutput;
+
+                results.classList.remove(
+                    'hidden'
+                );
+
+            } catch (err) {
+
+                showError(
+                    err.message
+                );
+
+            } finally {
+
+                showLoading(false);
+            }
+        }
+
+
+        // ==========================================
+        // AI CHAT
+        // ==========================================
+
+        async function sendMessage() {
+
+            const input =
+                document.getElementById(
+                    'chat-input'
+                );
+
+            const chatBox =
+                document.getElementById(
+                    'chat-box'
+                );
+
+            const message =
+                input.value.trim();
+
+            if (!message) return;
+
+            chatBox.innerHTML +=
+`
+<div class="user-message">
+${message}
+</div>
+`;
+
+            input.value = '';
+
+            try {
+
+                const response =
+                    await fetch(
+                        '/chat',
+                        {
+
+                            method: 'POST',
+
+                            headers: {
+                                'Content-Type':
+                                'application/json'
+                            },
+
+                            body:
+                            JSON.stringify({
+                                message
+                            })
+                        }
+                    );
+
+                const data =
+                    await response.json();
+
+                chatBox.innerHTML +=
+`
+<div class="ai-message">
+${data.response}
+</div>
+`;
+
+                chatBox.scrollTop =
+                    chatBox.scrollHeight;
+
+            } catch (err) {
+
+                chatBox.innerHTML +=
+`
+<div class="ai-message">
+${err.message}
+</div>
+`;
+            }
+        }
+
+
+        // ==========================================
+        // COPY BUTTON
+        // ==========================================
+
+        document.getElementById(
+            'copy-fixed'
+        ).addEventListener(
+            'click',
+            () => {
+
+                navigator.clipboard.writeText(
+
+                    document.getElementById(
+                        'fixed-code'
+                    ).textContent
+                );
+            }
+        );
+
+
+        // ==========================================
+        // HELPERS
+        // ==========================================
+
+        function showLoading(show) {
+
+            loading.classList.toggle(
+                'hidden',
+                !show
+            );
+        }
+
+        function showError(msg) {
+
+            errorDiv.textContent = msg;
+
+            errorDiv.classList.remove(
+                'hidden'
+            );
+        }
+
+        function hideError() {
+
+            errorDiv.classList.add(
+                'hidden'
+            );
+        }
+
+    </script>
+
+</body>
+
+</html>

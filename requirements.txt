@@ -1,0 +1,5 @@
+Flask==3.0.3
+groq==0.4.1
+pylint==3.2.8
+python-dotenv==1.0.1
+
